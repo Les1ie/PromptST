@@ -32,7 +32,7 @@ def get_data_loader(dataset_name, output_channel, normal_flag, data_dir='../grap
     Y_list = [0,1,2,3,4,5,6,7,8,9,10,11]
     Y_list = Y_list[:output_channel]
 
-    basic_dir = '/data/zcxbo/autostl/promptST/'
+    basic_dir = './'
     data, normal = list(), list()
     normal_method = Standard#getattr(normalization, Normal_Method)
     data_category = [dataset_name]

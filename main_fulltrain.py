@@ -15,6 +15,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from promptST import ttnet, prompt_ttnet
 import time, random
 import scipy.sparse as sp
+from comet_ml import Experiment
 
 
 def get_dataset(name, path, out_channel, normal_flag):
@@ -44,7 +45,7 @@ def get_criterion(loss_type, device):
     return criterion
 
 
-def train(model, optimizer, train_iterator1, criterion, normal, args, log_interval=400):
+def train(model, optimizer, train_iterator1, criterion, normal, args, experiment, log_interval=400):
     model.train()
 
     num_example = 0
@@ -77,12 +78,11 @@ def train(model, optimizer, train_iterator1, criterion, normal, args, log_interv
         num_example += x.shape[0]
         assert num_example == len(all_pred), f'num_example: {num_example}, all_pred1: {all_pred.shape}'
 
-        if i % log_interval == 0:
-            pass
+        experiment.log_metric("train/loss", loss.item(), step=i)
         i+=1
     return  
 
-def test(model, val_iterator1, criterion, normal, args):
+def test(model, val_iterator1, criterion, normal, args, experiment):
     with torch.no_grad():
         model.eval()
 
@@ -128,6 +128,11 @@ def test(model, val_iterator1, criterion, normal, args):
         print(f'val_loss_Masked_RMSE: {masked_rmse(all_pred, all_y, 0.0)}, val_Masked_MAE: {masked_mae(all_pred, all_y, 0.0)}')
         print(f'val_loss_Masked_MAPE: {masked_mape(all_pred, all_y, 0.0)}')
         print(f'val_loss_RMSE: {rmse}, val_mae: {mae}')
+        experiment.log_metric("val/loss_RMSE", rmse.item())
+        experiment.log_metric("val/mae", mae.item())
+        mape = masked_mape(all_pred, all_y, 0.0)
+        print(f'val_loss_MAPE: {mape}')
+        experiment.log_metric("val/mape", mape.item())
         rmse_list, mae_list = [], []
         _pred = all_pred.cpu().numpy()
         _y = all_y.cpu().numpy()
@@ -137,10 +142,12 @@ def test(model, val_iterator1, criterion, normal, args):
         _rmse_list = [i.item() for i in rmse_list]
         _mae_list = [i.item() for i in mae_list]
         print(f'mean val_loss_RMSE: {np.mean(_rmse_list)}, mean val_mae: {np.mean(_mae_list)}')
-    return rmse, _rmse_list, _mae_list
+    return rmse, _rmse_list, _mae_list, mape
 
 
 def main(args):
+    experiment = Experiment(project_name="PromptST", workspace="staple")
+    experiment.log_parameters(vars(args))
     if args.seed != 0:
         print(f'fix seed as: {args.seed}')
         np.random.seed(args.seed)
@@ -195,12 +202,12 @@ def main(args):
     criterion = get_criterion(args.loss_type, args.device)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    test_loss = test(model, test_data_loader, criterion, normal, args)[0]
+    test_loss = test(model, test_data_loader, criterion, normal, args, experiment)[0]
     print(f'test loss: {test_loss}')
     time_start=time.time()
     for epoch_i in range(args.epoch):
-        train(model, optimizer, train_data_loader, criterion, normal, args)
-        val_loss = test(model, val_data_loader, criterion, normal, args)[0]
+        train(model, optimizer, train_data_loader, criterion, normal, args, experiment)
+        val_loss = test(model, val_data_loader, criterion, normal, args, experiment)[0]
         if val_loss < lowest_val_loss:
             lowest_val_loss = val_loss
             print(f'lowest validation loss: {lowest_val_loss}')
@@ -221,8 +228,11 @@ def main(args):
             break
     model_data = torch.load(save_path, map_location=args.device)
     model.load_state_dict(model_data['model'])
-    test_loss, test_rmse, test_mae = test(model, test_data_loader, criterion, normal, args)
+    test_loss, test_rmse, test_mae, test_mape = test(model, test_data_loader, criterion, normal, args, experiment)
     print(f'test loss: {test_loss}')
+    experiment.log_metric("test/loss_RMSE", test_loss.item())
+    experiment.log_metric("test/loss_MAE", test_mae.item())
+    experiment.log_metric("test/loss_MAPE", test_mape.item())
     time_end=time.time()
     print('time cost %.4f s' %float(time_end-time_start))
     best_epoch = model_data['epoch']
@@ -261,4 +271,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_shuffle', action='store_true')
     args = parser.parse_args()
     print(args)
+    os.makedirs(args.save_dir, exist_ok=True)
+    os.makedirs('output', exist_ok=True)
+    os.makedirs(f'output/{args.out_dir}', exist_ok=True)
     main(args)
