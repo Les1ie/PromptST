@@ -44,10 +44,11 @@ def get_criterion(loss_type, device):
 
     return criterion
 
+GLOABL_STEPS = 0
 
-def train(model, optimizer, train_iterator1, criterion, normal, args, experiment, log_interval=400):
+def train(model, optimizer, train_iterator1, criterion, normal, args, experiment, log_interval=400, epoch=None):
     model.train()
-
+    global GLOABL_STEPS
     num_example = 0
     MAE_LOSS = torch.nn.L1Loss()
     MSE_LOSS = torch.nn.MSELoss()
@@ -94,7 +95,7 @@ def train(model, optimizer, train_iterator1, criterion, normal, args, experiment
         num_example += x.shape[0]
         assert num_example == len(all_pred), f'num_example: {num_example}, all_pred1: {all_pred.shape}'
 
-        experiment.log_metric("train/loss", loss.item(), step=i)
+        experiment.log_metric("train/loss", loss.item(), step=GLOABL_STEPS, epoch=epoch)
         # if i % log_interval == 0:
             # rmse = torch.sqrt(MSE_LOSS(all_pred, all_y))
             # mae = MAE_LOSS(all_pred, all_y)
@@ -102,9 +103,10 @@ def train(model, optimizer, train_iterator1, criterion, normal, args, experiment
             # print(f'train_loss_Masked_MAPE: {masked_mape(all_pred, all_y, 0.0)}')
             # print(f'train_loss_RMSE: {rmse}, train_mae: {mae}, i: {i}')
         i+=1
+        GLOABL_STEPS += 1
     return  
 
-def test(model, val_iterator1, criterion, normal, args, experiment):
+def test(model, val_iterator1, criterion, normal, args, experiment, epoch=None):
     with torch.no_grad():
         model.eval()
 
@@ -148,11 +150,11 @@ def test(model, val_iterator1, criterion, normal, args, experiment):
         print(f'val_loss_Masked_RMSE: {masked_rmse(all_pred, all_y, 0.0)}, val_Masked_MAE: {masked_mae(all_pred, all_y, 0.0)}')
         print(f'val_loss_Masked_MAPE: {masked_mape(all_pred, all_y, 0.0)}')
         print(f'val_loss_RMSE: {rmse}, val_mae: {mae}')
-        experiment.log_metric("val/loss_RMSE", rmse.item())
-        experiment.log_metric("val/mae", mae.item())
+        experiment.log_metric("val/loss_RMSE", rmse.item(),epoch=epoch)
+        experiment.log_metric("val/mae", mae.item(),epoch=epoch)
         mape = masked_mape(all_pred, all_y, 0.0)
         print(f'val_loss_MAPE: {mape}')
-        experiment.log_metric("val/mape", mape.item())
+        experiment.log_metric("val/mape", mape.item(),epoch=epoch)
 
     return rmse, mae, mape
 
@@ -315,5 +317,5 @@ if __name__ == '__main__':
     print(args)
     os.makedirs(args.save_dir, exist_ok=True)
     os.makedirs('output', exist_ok=True)
-    os.makedirs(f'output/{args.out_dir}', exist_ok=True)
+    # os.makedirs(f'output/{args.out_dir}', exist_ok=True)
     main(args)

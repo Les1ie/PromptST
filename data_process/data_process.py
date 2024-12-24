@@ -102,6 +102,5 @@ def get_graph(dataset_name):
         with open(pickle_file, 'rb') as f:
             pickle_data = pickle.load(f, encoding='latin1')
     except Exception as e:
-        print('Unable to load data ', pickle_file, ':', e)
-        raise
+        raise Exception(f'Unable to load data {pickle_file}: {e}')
     return pickle_data
